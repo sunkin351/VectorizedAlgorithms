@@ -1,4 +1,5 @@
 ﻿using System;
+using BenchmarkDotNet.Running;
 
 namespace VectorizedAlgorithms
 {
@@ -6,7 +7,7 @@ namespace VectorizedAlgorithms
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
+            BenchmarkRunner.Run<ElonAbernathy_Project>();
         }
     }
 }
