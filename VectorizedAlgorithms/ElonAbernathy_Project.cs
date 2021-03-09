@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
@@ -41,10 +40,15 @@ namespace VectorizationPlayground
         public int NumberOfPoints;
         [Params(100, 10_000)]
         public int NumberOfSegments;
-        private List<Point> points;
-        private List<LineSegment> segments;
-        private List<VecPoint> vecPoints = new List<VecPoint>();
-        private List<VecSegment> vecSegments = new List<VecSegment>();
+        private Point[] points;
+        private LineSegment[] segments;
+        private VecPoint[] vecPoints;
+        private VecSegment[] vecSegments;
+
+        private ParallelOptions _options = new ParallelOptions()
+        {
+            MaxDegreeOfParallelism = 12
+        };
 
         [GlobalSetup]
         public void GlobalSetup()
@@ -53,98 +57,164 @@ namespace VectorizationPlayground
             this.segments = GetSegments();
         }
 
-        public List<Point> GetPoints()
+        public Point[] GetPoints()
         {
-            List<Point> points = new List<Point>(NumberOfPoints);
-            vecPoints = new List<VecPoint>(NumberOfPoints);
+            Point[] points = new Point[NumberOfPoints];
+            
+            vecPoints = new VecPoint[NumberOfPoints];
+            
             Random random = new Random(seed);
+            
             for (int i = 0; i < NumberOfPoints; i++)
             {
                 Point point = new Point((random.NextDouble() - 0.5) * 1000, (random.NextDouble() - 0.5) * 1000, (random.NextDouble() - 0.5) * 1000);
-                points.Add(point);
-                vecPoints.Add(new VecPoint() { vector3 = new Vector3((float)point.x, (float)point.y, (float)point.z) });
+                
+                points[i] = point;
+
+                vecPoints[i] = new Vector3((float)point.X, (float)point.Y, (float)point.Z);
             }
+
             return points;
         }
 
-        public List<LineSegment> GetSegments()
+        public LineSegment[] GetSegments()
         {
-            List<LineSegment> lineSegments = new List<LineSegment>(NumberOfSegments);
+            LineSegment[] lineSegments = new LineSegment[NumberOfSegments];
+            vecSegments = new VecSegment[NumberOfSegments];
+
             Random random = new Random(seed * 2); //Mersenne, take the wheel!
             for (int i = 0; i < NumberOfSegments; i++)
             {
                 Point a = new Point((random.NextDouble() - 0.5) * 1000, (random.NextDouble() - 0.5) * 1000, (random.NextDouble() - 0.5) * 1000);
                 Point b = new Point((random.NextDouble() - 0.5) * 1000, (random.NextDouble() - 0.5) * 1000, (random.NextDouble() - 0.5) * 1000);
-                lineSegments.Add(new LineSegment()
-                {
-                    a = a,
-                    b = b
-                });
-                vecSegments.Add(new VecSegment()
-                {
-                    a = new VecPoint() { vector3 = new Vector3((float)a.x, (float)a.y, (float)a.z) },
-                    b = new VecPoint() { vector3 = new Vector3((float)b.x, (float)b.y, (float)b.z) },
-                });
+
+                lineSegments[i] = new LineSegment(a, b);
+
+                vecSegments[i] = new VecSegment(
+                    new Vector3((float)a.X, (float)a.Y, (float)a.Z),
+                    new Vector3((float)b.X, (float)b.Y, (float)b.Z)
+                );
             }
+
             return lineSegments;
         }
 
         [Benchmark(Baseline = true)]
-        public double LinqSolution()
+        public double Solution()
         {
             double result = 0;
             foreach (Point point in this.points)
             {
-                Point shortest = this.segments
-                            .Select(x => DomainMathFunctions.GetClosestPointOnLine(point, x))
-                            .OrderBy(y => Point.DistanceSquared(point, y)).FirstOrDefault();
+                Point shortest = default;
+                double distanceSq = double.MaxValue;
+
+                foreach (var segment in this.segments)
+                {
+                    var tmp = DomainMathFunctions.GetClosestPointOnLine(point, segment);
+
+                    double tdist = Point.DistanceSquared(point, tmp);
+
+                    if (distanceSq > tdist)
+                    {
+                        shortest = tmp;
+                        distanceSq = tdist;
+                    }
+                }
+
                 result += Point.DistanceSquared(point, shortest);
             }
             return result;
         }
 
         [Benchmark]
-        public double ParallelLinqSolution()
+        public double ParallelSolution()
         {
-            double result = 0;
-            Parallel.ForEach(points, (point) =>
+            double[] results = new double[points.Length];
+
+            Parallel.For(0, results.Length, _options, index =>
             {
-                Point shortest = this.segments
-                            .Select(x => DomainMathFunctions.GetClosestPointOnLine(point, x))
-                            .OrderBy(y => Point.DistanceSquared(point, y)).FirstOrDefault();
-                result += Point.DistanceSquared(point, shortest);
+                var point = this.points[index];
+
+                Point shortest = default;
+                double distanceSq = double.MaxValue;
+
+                foreach (var segment in this.segments)
+                {
+                    var tmp = DomainMathFunctions.GetClosestPointOnLine(point, segment);
+
+                    double tdist = Point.DistanceSquared(point, tmp);
+
+                    if (distanceSq > tdist)
+                    {
+                        shortest = tmp;
+                        distanceSq = tdist;
+                    }
+                }
+
+                results[index] = Point.DistanceSquared(point, shortest);
 
             });
-            return result;
+
+            return results.Sum();
         }
 
         [Benchmark]
-        public double VecLinqSolution()
+        public double VecSolution()
         {
             double result = 0;
             foreach (var point in this.vecPoints)
             {
-                Vector3 shortest = this.vecSegments
-                            .Select(x => DomainMathFunctions.GetClosestPointOnLine(point, x))
-                            .OrderBy(y => Vector3.DistanceSquared(point.vector3, y)).FirstOrDefault();
+                Vector3 shortest = default;
+                double distanceSq = double.MaxValue;
+
+                foreach (var segment in this.vecSegments)
+                {
+                    var tmp = DomainMathFunctions.GetClosestPointOnLine(point, segment);
+
+                    double tdist = Vector3.DistanceSquared(point.vector3, tmp);
+
+                    if (distanceSq > tdist)
+                    {
+                        shortest = tmp;
+                        distanceSq = tdist;
+                    }
+                }
+
                 result += Vector3.Distance(point.vector3, shortest);
             }
             return result;
         }
 
         [Benchmark]
-        public double ParallelVecLinqSolution()
+        public double ParallelVecSolution()
         {
-            double result = 0;
-            Parallel.ForEach(vecPoints, (point) =>
+            double[] results = new double[vecPoints.Length];
+
+            Parallel.For(0, vecPoints.Length, _options, index =>
             {
-                Vector3 shortest = this.vecSegments
-                                 .Select(x => DomainMathFunctions.GetClosestPointOnLine(point, x))
-                                 .OrderBy(y => Vector3.DistanceSquared(point.vector3, y)).FirstOrDefault();
-                result += Vector3.Distance(point.vector3, shortest);
+                var point = this.vecPoints[index];
+
+                Vector3 shortest = default;
+                double distanceSq = double.MaxValue;
+
+                foreach (var segment in this.vecSegments)
+                {
+                    var tmp = DomainMathFunctions.GetClosestPointOnLine(point, segment);
+
+                    double tdist = Vector3.DistanceSquared(point.vector3, tmp);
+
+                    if (distanceSq > tdist)
+                    {
+                        shortest = tmp;
+                        distanceSq = tdist;
+                    }
+                }
+
+                results[index] = Vector3.Distance(point.vector3, shortest);
 
             });
-            return result;
+
+            return results.Sum();
         }
 
     }
@@ -153,46 +223,66 @@ namespace VectorizationPlayground
     {
         public string ID;
         public Vector3 vector3;
+
+        public VecPoint(Vector3 vec)
+        {
+            ID = null;
+            vector3 = vec;
+        }
+
+        public static implicit operator VecPoint(Vector3 vec)
+        {
+            return new VecPoint(vec);
+        }
     }
 
-    public class Point
+    public struct Point
     {
-        public double x;
-        public double y;
-        public double z;
+        public double X;
+        public double Y;
+        public double Z;
 
         public Point(double x, double y, double z)
         {
-            this.x = x;
-            this.y = y;
-            this.z = z;
+            this.X = x;
+            this.Y = y;
+            this.Z = z;
         }
 
         public static double Distance(Point a, Point b)
         {
-            var dx = a.x - b.x;
-            var dy = a.y - b.y;
-            var dz = a.z - b.z;
-            return Math.Sqrt(dx * dx + dy * dy + dz * dz);
+            return Math.Sqrt(DistanceSquared(a, b));
         }
 
         public static double DistanceSquared(Point a, Point b)
         {
-            var dx = a.x - b.x;
-            var dy = a.y - b.y;
-            var dz = a.z - b.z;
+            var dx = a.X - b.X;
+            var dy = a.Y - b.Y;
+            var dz = a.Z - b.Z;
             return dx * dx + dy * dy + dz * dz;
         }
     }
 
     public struct VecSegment
     {
-        public VecPoint a, b;
+        public VecPoint A, B;
+
+        public VecSegment(VecPoint a, VecPoint b)
+        {
+            A = a;
+            B = b;
+        }
     }
 
-    public class LineSegment
+    public struct LineSegment
     {
-        public Point a, b;
+        public Point A, B;
+
+        public LineSegment(Point a, Point b)
+        {
+            A = a;
+            B = b;
+        }
     }
 
     public class DomainMathFunctions
@@ -200,43 +290,43 @@ namespace VectorizationPlayground
         public static Vector3 GetClosestPointOnLine(VecPoint point, VecSegment lineSegment)
         {
             Vector3 vPoint = point.vector3;
-            Vector3 vlo = lineSegment.a.vector3;
-            Vector3 vl = lineSegment.b.vector3 - vlo;
+            Vector3 vlo = lineSegment.A.vector3;
+            Vector3 vl = lineSegment.B.vector3 - vlo;
             Vector3 vfirst = vPoint - vlo;
             float num = Vector3.Dot(vl, vfirst);
             float den = Vector3.Dot(vl, vl);
             float vt = num / den;
             Vector3 middle = vl * vt + vlo;
-            bool isInside = Math.Abs(Vector3.Distance(lineSegment.a.vector3, lineSegment.b.vector3) - (Vector3.Distance(lineSegment.a.vector3, middle) + Vector3.Distance(lineSegment.b.vector3, middle))) < 0.001;
+            bool isInside = Math.Abs(Vector3.Distance(lineSegment.A.vector3, lineSegment.B.vector3) - (Vector3.Distance(lineSegment.A.vector3, middle) + Vector3.Distance(lineSegment.B.vector3, middle))) < 0.001;
             if (isInside)
             {
                 return middle;
             }
             else
             {
-                if (Vector3.Distance(lineSegment.a.vector3, point.vector3) < Vector3.Distance(lineSegment.b.vector3, point.vector3))
+                if (Vector3.Distance(lineSegment.A.vector3, point.vector3) < Vector3.Distance(lineSegment.B.vector3, point.vector3))
                 {
-                    return lineSegment.a.vector3;
+                    return lineSegment.A.vector3;
                 }
                 else
                 {
-                    return lineSegment.b.vector3;
+                    return lineSegment.B.vector3;
                 }
             }
         }
 
         public static Point GetClosestPointOnLine(Point point, LineSegment lineSegment)
         {
-            double x = point.x;
-            double y = point.y;
-            double z = point.z;
+            double x = point.X;
+            double y = point.Y;
+            double z = point.Z;
 
-            double lox = lineSegment.a.x;
-            double loy = lineSegment.a.y;
-            double loz = lineSegment.a.z;
-            double lx = lineSegment.b.x - lox;
-            double ly = lineSegment.b.y - loy;
-            double lz = lineSegment.b.z - loz;
+            double lox = lineSegment.A.X;
+            double loy = lineSegment.A.Y;
+            double loz = lineSegment.A.Z;
+            double lx = lineSegment.B.X - lox;
+            double ly = lineSegment.B.Y - loy;
+            double lz = lineSegment.B.Z - loz;
             double firstx = x - lox;
             double firsty = y - loy;
             double firstz = z - loz;
@@ -248,20 +338,20 @@ namespace VectorizationPlayground
             double yy = loy + t * ly;
             double zz = loz + t * lz;
             Point maybeMiddle = new Point(xx, yy, zz);
-            bool isOnLineSegment = Math.Abs(Point.Distance(lineSegment.a, lineSegment.b) - (Point.Distance(lineSegment.a, maybeMiddle) + Point.Distance(maybeMiddle, lineSegment.b))) < 0.001;
+            bool isOnLineSegment = Math.Abs(Point.Distance(lineSegment.A, lineSegment.B) - (Point.Distance(lineSegment.A, maybeMiddle) + Point.Distance(maybeMiddle, lineSegment.B))) < 0.001;
             if (isOnLineSegment)
             {
                 return new Point(xx, yy, zz);
             }
             else
             {
-                if (Point.Distance(point, lineSegment.a) < Point.Distance(point, lineSegment.b))
+                if (Point.Distance(point, lineSegment.A) < Point.Distance(point, lineSegment.B))
                 {
-                    return lineSegment.a;
+                    return lineSegment.A;
                 }
                 else
                 {
-                    return lineSegment.b;
+                    return lineSegment.B;
                 }
             }
         }
