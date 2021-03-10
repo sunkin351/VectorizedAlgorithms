@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -40,9 +40,9 @@ namespace VectorizedAlgorithms
     public class ElonAbernathy_Project
     {
         readonly int seed = 1;
-        [Params(200, 5_000)]
+        [Params(200, 500)]
         public int NumberOfPoints;
-        [Params(100, 10_000)]
+        [Params(100, 1000)]
         public int NumberOfSegments;
         private Point[] points;
         private LineSegment[] segments;
@@ -59,6 +59,22 @@ namespace VectorizedAlgorithms
         [GlobalSetup]
         public void GlobalSetup()
         {
+            this.points = GetPoints();
+            this.segments = GetSegments();
+        }
+
+        public void BenchmarkSetup()
+        {
+            NumberOfPoints = 200;
+            NumberOfSegments = 100;
+            this.points = GetPoints();
+            this.segments = GetSegments();
+        }
+
+        public void Unit_Setup()
+        {
+            NumberOfPoints = 8;
+            NumberOfSegments = 1;
             this.points = GetPoints();
             this.segments = GetSegments();
         }
@@ -409,7 +425,7 @@ namespace VectorizedAlgorithms
                 Unsafe.Add(ref Unsafe.As<float, Vector128<float>>(ref MemoryMarshal.GetArrayDataReference(results)), i) = tmp;
             }
 
-            return results.Sum();
+            return Sum(results.AsSpan(0, NumberOfPoints));
         }
 
         [Benchmark]
@@ -594,7 +610,7 @@ namespace VectorizedAlgorithms
                 Unsafe.Add(ref Unsafe.As<float, Vector256<float>>(ref MemoryMarshal.GetArrayDataReference(results)), i) = tmp;
             }
 
-            return results.Sum();
+            return Sum(results.AsSpan(0, NumberOfPoints));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -621,6 +637,18 @@ namespace VectorizedAlgorithms
             {
                 return Avx.Add(Avx.Multiply(a, b), c);
             }
+        }
+
+        private static double Sum(ReadOnlySpan<float> span)
+        {
+            double sum = 0;
+
+            for (int i = 0; i < span.Length; ++i)
+            {
+                sum += span[i];
+            }
+
+            return sum;
         }
     }
 
