@@ -434,7 +434,7 @@ namespace VectorizedAlgorithms
             if (!Avx.IsSupported)
                 throw new PlatformNotSupportedException();
 
-            float[] results = new float[PointData.Vector128Count * Vector256<float>.Count];
+            float[] results = new float[PointData.Vector256Count * Vector256<float>.Count];
 
             Vector256<float>* shortest = stackalloc Vector256<float>[4] //Manual Fully controlled stack spill
             {
@@ -444,7 +444,7 @@ namespace VectorizedAlgorithms
                 Vector256.Create(float.MaxValue) // distance
             };
 
-            for (int i = 0; i < PointData.Vector128Count; ++i)
+            for (int i = 0; i < PointData.Vector256Count; ++i)
             {
                 // float x = point.X;
                 // float y = point.Y;
@@ -717,7 +717,7 @@ namespace VectorizedAlgorithms
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static ref Vector128<float> GetVector128(float[] arr, int vectorIndex)
         {
-            return ref Unsafe.As<float, Vector128<float>>(ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(arr), vectorIndex * Vector128<float>.Count));
+            return ref Unsafe.Add(ref Unsafe.As<float, Vector128<float>>(ref MemoryMarshal.GetArrayDataReference(arr)), vectorIndex);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
