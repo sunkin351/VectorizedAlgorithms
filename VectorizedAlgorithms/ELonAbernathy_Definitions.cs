@@ -28,23 +28,30 @@ namespace VectorizedAlgorithms
 
     public struct Point
     {
-        public double X;
-        public double Y;
-        public double Z;
+        public float X;
+        public float Y;
+        public float Z;
+
+        public Point(float x, float y, float z)
+        {
+            X = x;
+            Y = y;
+            Z = z;
+        }
 
         public Point(double x, double y, double z)
         {
-            this.X = x;
-            this.Y = y;
-            this.Z = z;
+            X = (float)x;
+            Y = (float)y;
+            Z = (float)z;
         }
 
-        public static double Distance(Point a, Point b)
+        public static float Distance(Point a, Point b)
         {
-            return Math.Sqrt(DistanceSquared(a, b));
+            return MathF.Sqrt(DistanceSquared(a, b));
         }
 
-        public static double DistanceSquared(Point a, Point b)
+        public static float DistanceSquared(Point a, Point b)
         {
             var dx = a.X - b.X;
             var dy = a.Y - b.Y;
@@ -70,11 +77,14 @@ namespace VectorizedAlgorithms
     public struct LineSegment
     {
         public Point A, B;
+        public float distance;
 
         public LineSegment(Point a, Point b)
         {
             A = a;
             B = b;
+
+            distance = Point.Distance(a, b);
         }
     }
 
@@ -97,7 +107,7 @@ namespace VectorizedAlgorithms
             }
             else
             {
-                if (Vector3.Distance(lineSegment.A.Vec3, point.Vec3) < Vector3.Distance(lineSegment.B.Vec3, point.Vec3))
+                if (Vector3.DistanceSquared(lineSegment.A.Vec3, point.Vec3) < Vector3.DistanceSquared(lineSegment.B.Vec3, point.Vec3))
                 {
                     return lineSegment.A.Vec3;
                 }
@@ -110,26 +120,26 @@ namespace VectorizedAlgorithms
 
         public static Point GetClosestPointOnLine(Point point, LineSegment lineSegment)
         {
-            double x = point.X;
-            double y = point.Y;
-            double z = point.Z;
+            float x = point.X;
+            float y = point.Y;
+            float z = point.Z;
 
-            double lox = lineSegment.A.X;
-            double loy = lineSegment.A.Y;
-            double loz = lineSegment.A.Z;
-            double lx = lineSegment.B.X - lox;
-            double ly = lineSegment.B.Y - loy;
-            double lz = lineSegment.B.Z - loz;
-            double firstx = x - lox;
-            double firsty = y - loy;
-            double firstz = z - loz;
-            double numerator = lx * firstx + ly * firsty + lz * firstz;
-            double denominator = lx * lx + ly * ly + lz * lz;
-            double t = numerator / denominator;
+            float lox = lineSegment.A.X;
+            float loy = lineSegment.A.Y;
+            float loz = lineSegment.A.Z;
+            float lx = lineSegment.B.X - lox;
+            float ly = lineSegment.B.Y - loy;
+            float lz = lineSegment.B.Z - loz;
+            float firstx = x - lox;
+            float firsty = y - loy;
+            float firstz = z - loz;
+            float numerator = lx * firstx + ly * firsty + lz * firstz;
+            float denominator = lx * lx + ly * ly + lz * lz;
+            float t = numerator / denominator;
 
-            double xx = lox + t * lx;
-            double yy = loy + t * ly;
-            double zz = loz + t * lz;
+            float xx = lox + t * lx;
+            float yy = loy + t * ly;
+            float zz = loz + t * lz;
             Point maybeMiddle = new Point(xx, yy, zz);
             bool isOnLineSegment = Math.Abs(Point.Distance(lineSegment.A, lineSegment.B) - (Point.Distance(lineSegment.A, maybeMiddle) + Point.Distance(maybeMiddle, lineSegment.B))) < 0.001;
             if (isOnLineSegment)

@@ -71,12 +71,27 @@ namespace VectorizedAlgorithms
             this.segments = GetSegments();
         }
 
-        public void Unit_Setup()
+        public void Unit_Setup(Point[] pointData, LineSegment[] segmentData)
         {
-            NumberOfPoints = 8;
-            NumberOfSegments = 1;
-            this.points = GetPoints();
-            this.segments = GetSegments();
+            NumberOfPoints = pointData.Length;
+            NumberOfSegments = segmentData.Length;
+
+            this.points = pointData;
+            this.segments = segmentData;
+
+            PointData = new VectorizedCalculationContext(pointData.Length);
+
+            for (int i = 0; i < pointData.Length; ++i)
+            {
+                var point = pointData[i];
+
+                PointData.SetElements(i, point.X, point.Y, point.Z);
+            }
+        }
+
+        private static Point GetRandomPoint(Random rng)
+        {
+            return new Point((rng.NextDouble() - 0.5) * 1000, (rng.NextDouble() - 0.5) * 1000, (rng.NextDouble() - 0.5) * 1000);
         }
 
         public Point[] GetPoints()
@@ -91,13 +106,13 @@ namespace VectorizedAlgorithms
             
             for (int i = 0; i < NumberOfPoints; i++)
             {
-                Point point = new Point((random.NextDouble() - 0.5) * 1000, (random.NextDouble() - 0.5) * 1000, (random.NextDouble() - 0.5) * 1000);
+                Point point = GetRandomPoint(random);
                 
                 points[i] = point;
 
-                vecPoints[i] = new Vector3((float)point.X, (float)point.Y, (float)point.Z);
+                vecPoints[i] = new Vector3(point.X, point.Y, point.Z);
 
-                PointData.SetElements(i, (float)point.X, (float)point.Y, (float)point.Z);
+                PointData.SetElements(i, point.X, point.Y, point.Z);
             }
 
             return points;
@@ -111,14 +126,14 @@ namespace VectorizedAlgorithms
             Random random = new Random(seed * 2); //Mersenne, take the wheel!
             for (int i = 0; i < NumberOfSegments; i++)
             {
-                Point a = new Point((random.NextDouble() - 0.5) * 1000, (random.NextDouble() - 0.5) * 1000, (random.NextDouble() - 0.5) * 1000);
-                Point b = new Point((random.NextDouble() - 0.5) * 1000, (random.NextDouble() - 0.5) * 1000, (random.NextDouble() - 0.5) * 1000);
+                Point a = GetRandomPoint(random);
+                Point b = GetRandomPoint(random);
 
                 lineSegments[i] = new LineSegment(a, b);
 
                 vecSegments[i] = new VecSegment(
-                    new Vector3((float)a.X, (float)a.Y, (float)a.Z),
-                    new Vector3((float)b.X, (float)b.Y, (float)b.Z)
+                    new Vector3(a.X, a.Y, a.Z),
+                    new Vector3(b.X, b.Y, b.Z)
                 );
             }
 
@@ -126,19 +141,22 @@ namespace VectorizedAlgorithms
         }
 
         [Benchmark(Baseline = true)]
-        public double Solution()
+        public float[] Solution()
         {
-            double result = 0;
-            foreach (Point point in this.points)
+            float[] result = new float[this.NumberOfPoints];
+
+            for(int i = 0; i < NumberOfPoints; ++i)
             {
+                Point point = points[i];
+
                 Point shortest = default;
-                double distanceSq = double.MaxValue;
+                float distanceSq = float.MaxValue;
 
                 foreach (var segment in this.segments)
                 {
                     var tmp = DomainMathFunctions.GetClosestPointOnLine(point, segment);
 
-                    double tdist = Point.DistanceSquared(point, tmp);
+                    float tdist = Point.DistanceSquared(point, tmp);
 
                     if (distanceSq > tdist)
                     {
@@ -147,57 +165,26 @@ namespace VectorizedAlgorithms
                     }
                 }
 
-                result += Point.DistanceSquared(point, shortest);
+                result[i] = Point.Distance(point, shortest);
             }
+
             return result;
         }
 
-        //[Benchmark]
-        public double ParallelSolution()
+        [Benchmark]
+        public float VecSolution()
         {
-            double[] results = new double[points.Length];
-
-            Parallel.For(0, results.Length, _options, index =>
-            {
-                var point = this.points[index];
-
-                Point shortest = default;
-                double distanceSq = double.MaxValue;
-
-                foreach (var segment in this.segments)
-                {
-                    var tmp = DomainMathFunctions.GetClosestPointOnLine(point, segment);
-
-                    double tdist = Point.DistanceSquared(point, tmp);
-
-                    if (distanceSq > tdist)
-                    {
-                        shortest = tmp;
-                        distanceSq = tdist;
-                    }
-                }
-
-                results[index] = Point.DistanceSquared(point, shortest);
-
-            });
-
-            return results.Sum();
-        }
-
-        //[Benchmark]
-        public double VecSolution()
-        {
-            double result = 0;
+            float result = 0;
             foreach (var point in this.vecPoints)
             {
                 Vector3 shortest = default;
-                double distanceSq = double.MaxValue;
+                float distanceSq = float.MaxValue;
 
                 foreach (var segment in this.vecSegments)
                 {
                     var tmp = DomainMathFunctions.GetClosestPointOnLine(point, segment);
 
-                    double tdist = Vector3.DistanceSquared(point.Vec3, tmp);
+                    float tdist = Vector3.DistanceSquared(point.Vec3, tmp);
 
                     if (distanceSq > tdist)
                     {
@@ -211,40 +198,8 @@ namespace VectorizedAlgorithms
             return result;
         }
 
-        //[Benchmark]
-        public double ParallelVecSolution()
-        {
-            double[] results = new double[vecPoints.Length];
-
-            Parallel.For(0, vecPoints.Length, _options, index =>
-            {
-                var point = this.vecPoints[index];
-
-                Vector3 shortest = default;
-                double distanceSq = double.MaxValue;
-
-                foreach (var segment in this.vecSegments)
-                {
-                    var tmp = DomainMathFunctions.GetClosestPointOnLine(point, segment);
-
-                    double tdist = Vector3.DistanceSquared(point.Vec3, tmp);
-
-                    if (distanceSq > tdist)
-                    {
-                        shortest = tmp;
-                        distanceSq = tdist;
-                    }
-                }
-
-                results[index] = Vector3.Distance(point.Vec3, shortest);
-
-            });
-
-            return results.Sum();
-        }
-
         [Benchmark]
-        public unsafe double Sse41_Solution()
+        public unsafe ReadOnlySpan<float> Sse41_Solution()
         {
             if (!Sse41.IsSupported)
                 throw new PlatformNotSupportedException();
@@ -268,9 +223,9 @@ namespace VectorizedAlgorithms
                 var point_Y = PointData.GetYVector128(i);
                 var point_Z = PointData.GetZVector128(i);
 
-                for (int j = 0; j < vecSegments.Length; ++j)
+                for (int j = 0; j < this.segments.Length; ++j)
                 {
-                    ref var segment = ref vecSegments[j];
+                    ref var segment = ref this.segments[j];
 
                     Vector128<float> v0, v1, v2, v3, v4, v5;
 
@@ -425,11 +380,11 @@ namespace VectorizedAlgorithms
                 Unsafe.Add(ref Unsafe.As<float, Vector128<float>>(ref MemoryMarshal.GetArrayDataReference(results)), i) = tmp;
             }
 
-            return Sum(results.AsSpan(0, NumberOfPoints));
+            return results.AsSpan(0, NumberOfPoints);
         }
 
         [Benchmark]
-        public unsafe double Avx2_Solution()
+        public unsafe ReadOnlySpan<float> Avx2_Solution()
         {
             if (!Avx.IsSupported)
                 throw new PlatformNotSupportedException();
@@ -453,9 +408,9 @@ namespace VectorizedAlgorithms
                 var point_Y = PointData.GetYVector256(i);
                 var point_Z = PointData.GetZVector256(i);
 
-                for (int j = 0; j < vecSegments.Length; ++j)
+                for (int j = 0; j < this.segments.Length; ++j)
                 {
-                    ref var segment = ref vecSegments[j];
+                    ref var segment = ref this.segments[j];
 
                     Vector256<float> v0, v1, v2, v3, v4, v5;
 
@@ -610,7 +565,7 @@ namespace VectorizedAlgorithms
                 Unsafe.Add(ref Unsafe.As<float, Vector256<float>>(ref MemoryMarshal.GetArrayDataReference(results)), i) = tmp;
             }
 
-            return Sum(results.AsSpan(0, NumberOfPoints));
+            return results.AsSpan(0, NumberOfPoints);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -639,9 +594,9 @@ namespace VectorizedAlgorithms
             }
         }
 
-        private static double Sum(ReadOnlySpan<float> span)
+        private static float Sum(ReadOnlySpan<float> span)
         {
-            double sum = 0;
+            float sum = 0;
 
             for (int i = 0; i < span.Length; ++i)
             {
