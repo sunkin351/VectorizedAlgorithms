@@ -58,6 +58,11 @@ namespace VectorizedAlgorithms
             var dz = a.Z - b.Z;
             return dx * dx + dy * dy + dz * dz;
         }
+
+        public static implicit operator Vector3(Point p)
+        {
+            return new Vector3(p.X, p.Y, p.Z);
+        }
     }
 
     public struct VecSegment
@@ -74,51 +79,65 @@ namespace VectorizedAlgorithms
         }
     }
 
-    public struct LineSegment
+    public readonly struct LineSegment
     {
-        public Point A, B;
-        public float distance;
+        //Points
+        public readonly Vector3 A, B;
 
-        public LineSegment(Point a, Point b)
+        //Precalculated
+
+        /// <summary>
+        /// Direction Vector, not normalized, B - A
+        /// </summary>
+        public readonly Vector3 Direction;
+
+        public readonly float DirectionDot;
+        public readonly float Length;
+
+        public LineSegment(Vector3 a, Vector3 b)
         {
             A = a;
             B = b;
 
-            distance = Point.Distance(a, b);
+            var dir = b - a;
+            DirectionDot = Vector3.Dot(dir, dir);
+            Direction = dir;
+
+            Length = MathF.Sqrt(DirectionDot);
         }
     }
 
     public class DomainMathFunctions
     {
-        public static Vector3 GetClosestPointOnLine(VecPoint point, VecSegment lineSegment)
+        public static Vector3 GetClosestPointOnLine_VecMath(Vector3 point, ref LineSegment lineSegment)
         {
-            Vector3 vPoint = point.Vec3;
-            Vector3 vlo = lineSegment.A.Vec3;
-            Vector3 vl = lineSegment.B.Vec3 - vlo;
-            Vector3 vfirst = vPoint - vlo;
-            float num = Vector3.Dot(vl, vfirst);
-            float den = Vector3.Dot(vl, vl);
-            float vt = num / den;
-            Vector3 middle = vl * vt + vlo;
-            bool isInside = Math.Abs(Vector3.Distance(lineSegment.A.Vec3, lineSegment.B.Vec3) - (Vector3.Distance(lineSegment.A.Vec3, middle) + Vector3.Distance(lineSegment.B.Vec3, middle))) < 0.001;
-            if (isInside)
+            Vector3 vlo = lineSegment.A;
+            Vector3 vl = lineSegment.Direction;
+            Vector3 vfirst = point - vlo;
+            
+            float vt = Vector3.Dot(vl, vfirst) / lineSegment.DirectionDot;
+
+            Vector3 intersection = vl * vt + vlo;
+
+            bool isInsideLineSegment = Math.Max(Vector3.Distance(vlo, intersection), Vector3.Distance(intersection, lineSegment.B)) < lineSegment.Length;
+            if (isInsideLineSegment)
             {
-                return middle;
+                return intersection;
             }
             else
             {
-                if (Vector3.DistanceSquared(lineSegment.A.Vec3, point.Vec3) < Vector3.DistanceSquared(lineSegment.B.Vec3, point.Vec3))
+                if (Vector3.DistanceSquared(lineSegment.A, point) < Vector3.DistanceSquared(lineSegment.B, point))
                 {
-                    return lineSegment.A.Vec3;
+                    return lineSegment.A;
                 }
                 else
                 {
-                    return lineSegment.B.Vec3;
+                    return lineSegment.B;
                 }
             }
         }
 
-        public static Point GetClosestPointOnLine(Point point, LineSegment lineSegment)
+        public static Vector3 GetClosestPointOnLine_ScalarMath(Vector3 point, ref LineSegment lineSegment)
         {
             float x = point.X;
             float y = point.Y;
@@ -127,28 +146,29 @@ namespace VectorizedAlgorithms
             float lox = lineSegment.A.X;
             float loy = lineSegment.A.Y;
             float loz = lineSegment.A.Z;
-            float lx = lineSegment.B.X - lox;
-            float ly = lineSegment.B.Y - loy;
-            float lz = lineSegment.B.Z - loz;
+            float lx = lineSegment.Direction.X;
+            float ly = lineSegment.Direction.Y;
+            float lz = lineSegment.Direction.Z;
             float firstx = x - lox;
             float firsty = y - loy;
             float firstz = z - loz;
-            float numerator = lx * firstx + ly * firsty + lz * firstz;
-            float denominator = lx * lx + ly * ly + lz * lz;
-            float t = numerator / denominator;
+            float t = (lx * firstx + ly * firsty + lz * firstz) / lineSegment.DirectionDot;
 
             float xx = lox + t * lx;
             float yy = loy + t * ly;
             float zz = loz + t * lz;
-            Point maybeMiddle = new Point(xx, yy, zz);
-            bool isOnLineSegment = Math.Abs(Point.Distance(lineSegment.A, lineSegment.B) - (Point.Distance(lineSegment.A, maybeMiddle) + Point.Distance(maybeMiddle, lineSegment.B))) < 0.001;
+
+            Vector3 intersectionPoint = new(xx, yy, zz);
+            
+            bool isOnLineSegment = Math.Max(Vector3.Distance(lineSegment.A, intersectionPoint), Vector3.Distance(intersectionPoint, lineSegment.B)) < lineSegment.Length;
+            
             if (isOnLineSegment)
             {
-                return new Point(xx, yy, zz);
+                return intersectionPoint;
             }
             else
             {
-                if (Point.Distance(point, lineSegment.A) < Point.Distance(point, lineSegment.B))
+                if (Vector3.Distance(point, lineSegment.A) < Vector3.Distance(point, lineSegment.B))
                 {
                     return lineSegment.A;
                 }

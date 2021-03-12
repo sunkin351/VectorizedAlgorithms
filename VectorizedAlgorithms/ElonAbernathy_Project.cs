@@ -12,10 +12,6 @@ using BenchmarkDotNet.Jobs;
 
 namespace VectorizedAlgorithms
 {
-    /*
-
-     */
-
     [SimpleJob(RuntimeMoniker.NetCoreApp50), MemoryDiagnoser, DisassemblyDiagnoser(maxDepth: 2)]
     public class ElonAbernathy_Project
     {
@@ -24,8 +20,8 @@ namespace VectorizedAlgorithms
         public int NumberOfPoints;
         [Params(100, 1000)]
         public int NumberOfSegments;
-        private Point[] points;
-        private LineSegment[] segments;
+        public Point[] Points { get; private set; }
+        public LineSegment[] Segments { get; private set; }
         private VecPoint[] vecPoints;
         private VecSegment[] vecSegments;
 
@@ -39,16 +35,16 @@ namespace VectorizedAlgorithms
         [GlobalSetup]
         public void GlobalSetup()
         {
-            this.points = GetPoints();
-            this.segments = GetSegments();
+            this.Points = GetPoints();
+            this.Segments = GetSegments();
         }
 
         public void BenchmarkSetup()
         {
             NumberOfPoints = 200;
             NumberOfSegments = 100;
-            this.points = GetPoints();
-            this.segments = GetSegments();
+            this.Points = GetPoints();
+            this.Segments = GetSegments();
         }
 
         public void Unit_Setup(Point[] pointData, LineSegment[] segmentData)
@@ -56,8 +52,8 @@ namespace VectorizedAlgorithms
             NumberOfPoints = pointData.Length;
             NumberOfSegments = segmentData.Length;
 
-            this.points = pointData;
-            this.segments = segmentData;
+            this.Points = pointData;
+            this.Segments = segmentData;
 
             PointData = new VectorizedCalculationContext(pointData.Length);
 
@@ -127,16 +123,16 @@ namespace VectorizedAlgorithms
 
             for (int i = 0; i < NumberOfPoints; ++i)
             {
-                Point point = points[i];
+                Vector3 point = Points[i];
 
-                Point shortest = default;
+                Vector3 shortest = default;
                 float distanceSq = float.MaxValue;
 
-                foreach (var segment in this.segments)
+                for (int j = 0; j < Segments.Length; ++j)
                 {
-                    var tmp = DomainMathFunctions.GetClosestPointOnLine(point, segment);
+                    var tmp = DomainMathFunctions.GetClosestPointOnLine_ScalarMath(point, ref Segments[j]);
 
-                    float tdist = Point.DistanceSquared(point, tmp);
+                    float tdist = Vector3.DistanceSquared(point, tmp);
 
                     if (distanceSq > tdist)
                     {
@@ -145,26 +141,29 @@ namespace VectorizedAlgorithms
                     }
                 }
 
-                result[i] = Point.Distance(point, shortest);
+                result[i] = Vector3.Distance(point, shortest);
             }
 
             return result;
         }
 
         [Benchmark]
-        public float VecSolution()
+        public float[] VecSolution()
         {
-            float result = 0;
-            foreach (var point in this.vecPoints)
+            float[] result = new float[this.NumberOfPoints];
+
+            for (int i = 0; i < NumberOfPoints; ++i)
             {
+                Vector3 point = Points[i];
+
                 Vector3 shortest = default;
                 float distanceSq = float.MaxValue;
 
-                foreach (var segment in this.vecSegments)
+                for (int j = 0; j < Segments.Length; ++j)
                 {
-                    var tmp = DomainMathFunctions.GetClosestPointOnLine(point, segment);
+                    var tmp = DomainMathFunctions.GetClosestPointOnLine_VecMath(point, ref Segments[j]);
 
-                    float tdist = Vector3.DistanceSquared(point.Vec3, tmp);
+                    float tdist = Vector3.DistanceSquared(point, tmp);
 
                     if (distanceSq > tdist)
                     {
@@ -173,8 +172,9 @@ namespace VectorizedAlgorithms
                     }
                 }
 
-                result += Vector3.Distance(point.Vec3, shortest);
+                result[i] = Vector3.Distance(point, shortest);
             }
+
             return result;
         }
 
@@ -205,9 +205,9 @@ namespace VectorizedAlgorithms
                 var point_Y = PointData.GetYVector128(i);
                 var point_Z = PointData.GetZVector128(i);
 
-                for (int j = 0; j < this.segments.Length; ++j)
+                for (int j = 0; j < this.Segments.Length; ++j)
                 {
-                    ref var segment = ref this.segments[j];
+                    ref var segment = ref this.Segments[j];
 
                     Vector128<float> v0, v1, v2, v3, v4, v5;
 
@@ -218,12 +218,12 @@ namespace VectorizedAlgorithms
                     v1 = Vector128.Create(segment.A.Y);
                     v2 = Vector128.Create(segment.A.Z);
 
-                    // float lx = lineSegment.B.X - lox;
-                    // float ly = lineSegment.B.Y - loy;
-                    // float lz = lineSegment.B.Z - loz;
-                    v3 = Vector128.Create(segment.B.X - v0.ToScalar());
-                    v4 = Vector128.Create(segment.B.Y - v1.ToScalar());
-                    v5 = Vector128.Create(segment.B.Z - v2.ToScalar());
+                    // float lx = lineSegment.Direction.X;
+                    // float ly = lineSegment.Direction.Y;
+                    // float lz = lineSegment.Direction.Z;
+                    v3 = Vector128.Create(segment.Direction.X);
+                    v4 = Vector128.Create(segment.Direction.Y);
+                    v5 = Vector128.Create(segment.Direction.Z);
 
                     Vector128<float> v6, v7, v8, v9, v10, v11, v12;
 
@@ -234,31 +234,28 @@ namespace VectorizedAlgorithms
                     v7 = Sse.Subtract(point_Y, v1);
                     v8 = Sse.Subtract(point_Z, v2);
 
-                    // float numerator = lx * firstx + ly * firsty + lz * firstz;
+                    // float t = (lx * firstx + ly * firsty + lz * firstz) / segment.DirectionDot;
                     v6 = Sse.Multiply(v3, v6);
                     v6 = Helper_MultiplyAdd(v4, v7, v6);
                     v6 = Helper_MultiplyAdd(v5, v8, v6);
 
-                    // float denominator = lx * lx + ly * ly + lz * lz;
-                    v7 = Sse.Multiply(v3, v3);
-                    v7 = Helper_MultiplyAdd(v4, v4, v7);
-                    v7 = Helper_MultiplyAdd(v5, v5, v7);
+                    v7 = Vector128.Create(segment.DirectionDot);
 
-                    // float t = numerator / denominator;
                     v6 = Sse.Divide(v6, v7);
 
                     // float xx = lox + t * lx;
                     // float yy = loy + t * ly;
                     // float zz = loz + t * lz;
-                    // Point maybeMiddle = new Point(xx, yy, zz);
+                    // Point intersectionPoint = new Point(xx, yy, zz);
                     v3 = Helper_MultiplyAdd(v6, v3, v0);
                     v4 = Helper_MultiplyAdd(v6, v4, v1);
                     v5 = Helper_MultiplyAdd(v6, v5, v2);
 
-                    // Point.Distance(lineSegment.A, lineSegment.B)
-                    v6 = Vector128.Create(segment.distance);
+                    // bool isOnLineSegment = Math.Max(Vector3.Distance(lineSegment.A, intersectionPoint), Vector3.Distance(intersectionPoint, lineSegment.B)) < lineSegment.Length;
+                    // Vector3.Distance(lineSegment.A, lineSegment.B)
+                    v6 = Vector128.Create(segment.Length);
 
-                    // Point.Distance(lineSegment.A, maybeMiddle)
+                    // distance from A to Intersect
                     v7 = Sse.Subtract(v0, v3);
                     v7 = Sse.Multiply(v7, v7);
                     v8 = Sse.Subtract(v1, v4);
@@ -267,7 +264,7 @@ namespace VectorizedAlgorithms
                     v7 = Helper_MultiplyAdd(v8, v8, v7);
                     v7 = Sse.Sqrt(v7);
 
-                    // Point.Distance(maybeMiddle, lineSegment.B)
+                    // distance from intersect to B
                     v0 = Vector128.Create(segment.B.X);
                     v1 = Vector128.Create(segment.B.Y);
                     v2 = Vector128.Create(segment.B.Z);
@@ -280,11 +277,11 @@ namespace VectorizedAlgorithms
                     v8 = Helper_MultiplyAdd(v9, v9, v8);
                     v8 = Sse.Sqrt(v8);
 
-                    // bool isOnLineSegment = Math.Abs(Point.Distance(lineSegment.A, lineSegment.B) - (Point.Distance(lineSegment.A, maybeMiddle) + Point.Distance(maybeMiddle, lineSegment.B))) < 0.001;
-                    v7 = Sse.Add(v7, v8);
-                    v6 = Sse.Subtract(v6, v7);
-                    v6 = Sse.And(v6, Vector128.Create(int.MaxValue).AsSingle());
-                    v6 = Sse.CompareLessThan(v6, Vector128.Create(0.001f));
+                    //Max of distances
+                    v7 = Sse.Max(v7, v8);
+
+                    //Compare max distances to segment length
+                    v6 = Sse.CompareLessThan(v7, v6);
 
                     /*
                     if (isOnLineSegment)
@@ -351,12 +348,7 @@ namespace VectorizedAlgorithms
                     shortest[2] = Sse41.BlendVariable(shortest[2], v2, v6);
                 }
 
-                var tmp = Sse.Subtract(point_X, shortest[0]);
-                tmp = Sse.Multiply(tmp, tmp);
-                var tmp2 = Sse.Subtract(point_Y, shortest[1]);
-                tmp = Helper_MultiplyAdd(tmp2, tmp2, tmp);
-                tmp2 = Sse.Subtract(point_Z, shortest[2]);
-                tmp = Helper_MultiplyAdd(tmp2, tmp2, tmp);
+                var tmp = shortest[3];
                 tmp = Sse.Sqrt(tmp);
 
                 Unsafe.Add(ref Unsafe.As<float, Vector128<float>>(ref MemoryMarshal.GetArrayDataReference(results)), i) = tmp;
@@ -392,9 +384,9 @@ namespace VectorizedAlgorithms
                 var point_Y = PointData.GetYVector256(i);
                 var point_Z = PointData.GetZVector256(i);
 
-                for (int j = 0; j < this.segments.Length; ++j)
+                for (int j = 0; j < this.Segments.Length; ++j)
                 {
-                    ref var segment = ref this.segments[j];
+                    ref var segment = ref this.Segments[j];
 
                     Vector256<float> v0, v1, v2, v3, v4, v5;
 
@@ -443,7 +435,7 @@ namespace VectorizedAlgorithms
                     v5 = Helper_MultiplyAdd(v6, v5, v2);
 
                     // Point.Distance(lineSegment.A, lineSegment.B)
-                    v6 = Vector256.Create(segment.distance);
+                    v6 = Vector256.Create(segment.Length);
 
                     // Point.Distance(lineSegment.A, maybeMiddle)
                     v7 = Avx.Subtract(v0, v3);
@@ -468,10 +460,8 @@ namespace VectorizedAlgorithms
                     v8 = Avx.Sqrt(v8);
 
                     // bool isOnLineSegment = Math.Abs(Point.Distance(lineSegment.A, lineSegment.B) - (Point.Distance(lineSegment.A, maybeMiddle) + Point.Distance(maybeMiddle, lineSegment.B))) < 0.001;
-                    v7 = Avx.Add(v7, v8);
-                    v6 = Avx.Subtract(v6, v7);
-                    v6 = Avx.And(v6, Vector256.Create(int.MaxValue).AsSingle());
-                    v6 = Avx.Compare(v6, Vector256.Create(0.001f), FloatComparisonMode.OrderedLessThanNonSignaling);
+                    v7 = Avx.Max(v7, v8);
+                    v6 = Avx.CompareLessThan(v7, v6);
 
                     /*
                     if (isOnLineSegment)
@@ -530,7 +520,7 @@ namespace VectorizedAlgorithms
                     //     distanceSq = tdist;
                     // }
                     v5 = shortest[3];
-                    v6 = Avx.Compare(v5, v4, FloatComparisonMode.OrderedGreaterThanNonSignaling);
+                    v6 = Avx.CompareGreaterThan(v5, v4);
                     shortest[3] = Avx.BlendVariable(v5, v4, v6);
 
                     shortest[0] = Avx.BlendVariable(shortest[0], v0, v6);
@@ -538,12 +528,7 @@ namespace VectorizedAlgorithms
                     shortest[2] = Avx.BlendVariable(shortest[2], v2, v6);
                 }
 
-                var tmp = Avx.Subtract(point_X, shortest[0]);
-                tmp = Avx.Multiply(tmp, tmp);
-                var tmp2 = Avx.Subtract(point_Y, shortest[1]);
-                tmp = Helper_MultiplyAdd(tmp2, tmp2, tmp);
-                tmp2 = Avx.Subtract(point_Z, shortest[2]);
-                tmp = Helper_MultiplyAdd(tmp2, tmp2, tmp);
+                var tmp = shortest[3];
                 tmp = Avx.Sqrt(tmp);
 
                 Unsafe.Add(ref Unsafe.As<float, Vector256<float>>(ref MemoryMarshal.GetArrayDataReference(results)), i) = tmp;
@@ -588,91 +573,6 @@ namespace VectorizedAlgorithms
             }
 
             return sum;
-        }
-    }
-
-    public struct VectorizedCalculationContext
-    {
-        public readonly float[] X, Y, Z;
-        public readonly Guid[] Guids;
-        public readonly int Vector256Count;
-        public int Vector128Count => Vector256Count * 2;
-
-        public VectorizedCalculationContext(int elementCount)
-        {
-            int revisedElementCount = RoundUp(elementCount, Vector256<float>.Count);
-
-            X = new float[revisedElementCount];
-            Y = new float[revisedElementCount];
-            Z = new float[revisedElementCount];
-            Guids = null;
-
-            Vector256Count = revisedElementCount / Vector256<float>.Count;
-        }
-
-        public void SetElements(int i, float x, float y, float z)
-        {
-            X[i] = x;
-            Y[i] = y;
-            Z[i] = z;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ref Vector128<float> GetXVector128(int vectorIndex)
-        {
-            return ref GetVector128(X, vectorIndex);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ref Vector128<float> GetYVector128(int vectorIndex)
-        {
-            return ref GetVector128(Y, vectorIndex);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ref Vector128<float> GetZVector128(int vectorIndex)
-        {
-            return ref GetVector128(Z, vectorIndex);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ref Vector256<float> GetXVector256(int vectorIndex)
-        {
-            return ref GetVector256(X, vectorIndex);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ref Vector256<float> GetYVector256(int vectorIndex)
-        {
-            return ref GetVector256(Y, vectorIndex);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ref Vector256<float> GetZVector256(int vectorIndex)
-        {
-            return ref GetVector256(Z, vectorIndex);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static ref Vector128<float> GetVector128(float[] arr, int vectorIndex)
-        {
-            return ref Unsafe.Add(ref Unsafe.As<float, Vector128<float>>(ref MemoryMarshal.GetArrayDataReference(arr)), vectorIndex);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static ref Vector256<float> GetVector256(float[] arr, int vectorIndex)
-        {
-            return ref Unsafe.Add(ref Unsafe.As<float, Vector256<float>>(ref MemoryMarshal.GetArrayDataReference(arr)), vectorIndex);
-        }
-
-        private static int RoundUp(int value, int alignment)
-        {
-            return (value + alignment - 1) / alignment * alignment;
-        }
-
-        private static void Throw_IndexOutOfRange()
-        {
-            throw new IndexOutOfRangeException();
         }
     }
 }
