@@ -1,14 +1,39 @@
 using System;
-using System.Numerics;
-using Xunit;
-
-using VectorizedAlgorithms;
+using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
+using VectorizedAlgorithms;
+using Xunit;
 
 namespace UnitTesting
 {
     public class IntrinsicTests
     {
+        private class FloatComparer : EqualityComparer<float>
+        {
+            private int Precision;
+
+            public FloatComparer(int precision)
+            {
+                Precision = precision;
+            }
+
+            public override bool Equals(float x, float y)
+            {
+                return Round(x) == Round(y);
+            }
+
+            public override int GetHashCode(float val)
+            {
+                return Round(val).GetHashCode();
+            }
+
+            private float Round(float val)
+            {
+                return MathF.Round(val, Precision);
+            }
+        }
+
         [Fact]
         public void AllAnswersAreEqual()
         {
@@ -46,8 +71,10 @@ namespace UnitTesting
             var sse = benchMarkedFunctions.Sse41_Solution().ToArray();
             var avx = benchMarkedFunctions.Avx2_Solution().ToArray();
 
-            Assert.Equal(scalar, sse);
-            Assert.Equal(scalar, avx);
+            var comparer = new FloatComparer(5);
+
+            Assert.Equal(scalar, sse, comparer);
+            Assert.Equal(scalar, avx, comparer);
         }
     }
 
