@@ -1,12 +1,10 @@
 using System;
-using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using System.Threading.Tasks;
-
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 
@@ -24,9 +22,7 @@ namespace VectorizedAlgorithms
         public LineSegment[] Segments { get; private set; }
         private VecPoint[] vecPoints;
         private VecSegment[] vecSegments;
-
         private VectorizedCalculationContext PointData;
-
         private ParallelOptions _options = new ParallelOptions()
         {
             MaxDegreeOfParallelism = 12
@@ -51,16 +47,12 @@ namespace VectorizedAlgorithms
         {
             NumberOfPoints = pointData.Length;
             NumberOfSegments = segmentData.Length;
-
             this.Points = pointData;
             this.Segments = segmentData;
-
             PointData = new VectorizedCalculationContext(pointData.Length);
-
             for (int i = 0; i < pointData.Length; ++i)
             {
                 var point = pointData[i];
-
                 PointData.SetElements(i, point.X, point.Y, point.Z);
             }
         }
@@ -73,24 +65,16 @@ namespace VectorizedAlgorithms
         public Point[] GetPoints()
         {
             Point[] points = new Point[NumberOfPoints];
-
             vecPoints = new VecPoint[NumberOfPoints];
-
             PointData = new VectorizedCalculationContext(NumberOfPoints);
-
             Random random = new Random(seed);
-
             for (int i = 0; i < NumberOfPoints; i++)
             {
                 Point point = GetRandomPoint(random);
-
                 points[i] = point;
-
                 vecPoints[i] = new Vector3(point.X, point.Y, point.Z);
-
                 PointData.SetElements(i, point.X, point.Y, point.Z);
             }
-
             return points;
         }
 
@@ -98,52 +82,45 @@ namespace VectorizedAlgorithms
         {
             LineSegment[] lineSegments = new LineSegment[NumberOfSegments];
             vecSegments = new VecSegment[NumberOfSegments];
-
             Random random = new Random(seed * 2); //Mersenne, take the wheel!
             for (int i = 0; i < NumberOfSegments; i++)
             {
                 Point a = GetRandomPoint(random);
                 Point b = GetRandomPoint(random);
-
                 lineSegments[i] = new LineSegment(a, b);
-
                 vecSegments[i] = new VecSegment(
                     new Vector3(a.X, a.Y, a.Z),
                     new Vector3(b.X, b.Y, b.Z)
                 );
             }
-
             return lineSegments;
         }
 
+        /// <summary>
+        /// Returns an array of floats of distances.
+        /// </summary>
+        /// <returns></returns>
         [Benchmark(Baseline = true)]
         public float[] Solution()
         {
             float[] result = new float[this.NumberOfPoints];
-
             for (int i = 0; i < NumberOfPoints; ++i)
             {
                 Vector3 point = Points[i];
-
                 Vector3 shortest = default;
                 float distanceSq = float.MaxValue;
-
                 for (int j = 0; j < Segments.Length; ++j)
                 {
                     var tmp = DomainMathFunctions.GetClosestPointOnLine_ScalarMath(point, ref Segments[j]);
-
                     float tdist = Vector3.DistanceSquared(point, tmp);
-
                     if (distanceSq > tdist)
                     {
                         shortest = tmp;
                         distanceSq = tdist;
                     }
                 }
-
                 result[i] = Vector3.Distance(point, shortest);
             }
-
             return result;
         }
 
@@ -155,16 +132,12 @@ namespace VectorizedAlgorithms
             for (int i = 0; i < NumberOfPoints; ++i)
             {
                 Vector3 point = Points[i];
-
                 Vector3 shortest = default;
                 float distanceSq = float.MaxValue;
-
                 for (int j = 0; j < Segments.Length; ++j)
                 {
                     var tmp = DomainMathFunctions.GetClosestPointOnLine_VecMath(point, ref Segments[j]);
-
                     float tdist = Vector3.DistanceSquared(point, tmp);
-
                     if (distanceSq > tdist)
                     {
                         shortest = tmp;
@@ -174,7 +147,6 @@ namespace VectorizedAlgorithms
 
                 result[i] = Vector3.Distance(point, shortest);
             }
-
             return result;
         }
 
