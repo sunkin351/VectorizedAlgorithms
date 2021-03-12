@@ -125,6 +125,30 @@ namespace VectorizedAlgorithms
         }
 
         [Benchmark]
+        public float[] ParallelSolution()
+        {
+            float[] result = new float[NumberOfPoints];
+            Parallel.For(0, NumberOfPoints, i =>
+            {
+                Vector3 point = Points[i];
+                Vector3 shortest = default;
+                float distanceSq = float.MaxValue;
+                for (int j = 0; j < Segments.Length; ++j)
+                {
+                    var tmp = DomainMathFunctions.GetClosestPointOnLine_ScalarMath(point, ref Segments[j]);
+                    float tdist = Vector3.DistanceSquared(point, tmp);
+                    if (distanceSq > tdist)
+                    {
+                        shortest = tmp;
+                        distanceSq = tdist;
+                    }
+                }
+                result[i] = Vector3.Distance(point, shortest);
+            });
+            return result;
+        }
+
+        [Benchmark]
         public float[] VecSolution()
         {
             float[] result = new float[this.NumberOfPoints];
