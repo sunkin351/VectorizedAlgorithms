@@ -13,28 +13,8 @@ using BenchmarkDotNet.Jobs;
 namespace VectorizedAlgorithms
 {
     /*
-    |                  Method | NumberOfPoints | NumberOfSegments |           Mean |        Error |       StdDev |         Median | Ratio | RatioSD |       Gen 0 |     Gen 1 | Gen 2 |     Allocated |
-    |------------------------ |--------------- |----------------- |---------------:|-------------:|-------------:|---------------:|------:|--------:|------------:|----------:|------:|--------------:|
-    |            LinqSolution |            200 |              100 |     1,107.8 us |     10.54 us |      8.80 us |     1,105.6 us |  1.00 |    0.00 |    224.6094 |         - |     - |    1378.59 KB |
-    |    ParallelLinqSolution |            200 |              100 |       358.0 us |      5.69 us |      5.32 us |       357.5 us |  0.32 |    0.01 |    226.0742 |    5.8594 |     - |    1382.66 KB |
-    |         VecLinqSolution |            200 |              100 |     1,192.0 us |      8.71 us |      7.72 us |     1,189.7 us |  1.08 |    0.01 |     11.7188 |         - |     - |         75 KB |
-    | ParallelVecLinqSolution |            200 |              100 |       284.6 us |      3.76 us |      3.14 us |       285.1 us |  0.26 |    0.00 |     12.6953 |         - |     - |      78.74 KB |
-    |                         |                |                  |                |              |              |                |       |         |             |           |       |               |
-    |            LinqSolution |            200 |            10000 |   108,680.2 us |  1,251.32 us |  1,170.49 us |   108,191.1 us |  1.00 |    0.00 |  20800.0000 |         - |     - |  127849.36 KB |
-    |    ParallelLinqSolution |            200 |            10000 |    27,452.8 us |    545.30 us |    997.10 us |    27,890.4 us |  0.24 |    0.01 |  20906.2500 |  312.5000 |     - |  127857.15 KB |
-    |         VecLinqSolution |            200 |            10000 |   117,633.9 us |  1,101.86 us |  1,030.68 us |   117,714.4 us |  1.08 |    0.01 |           - |         - |     - |      75.26 KB |
-    | ParallelVecLinqSolution |            200 |            10000 |    16,583.2 us |    254.05 us |    237.64 us |    16,566.5 us |  0.15 |    0.00 |           - |         - |     - |      79.16 KB |
-    |                         |                |                  |                |              |              |                |       |         |             |           |       |               |
-    |            LinqSolution |           5000 |              100 |    27,017.4 us |    278.57 us |    232.62 us |    26,927.5 us |  1.00 |    0.00 |   5625.0000 |         - |     - |   34477.97 KB |
-    |    ParallelLinqSolution |           5000 |              100 |     6,634.3 us |     96.04 us |     85.14 us |     6,641.3 us |  0.25 |    0.00 |   5632.8125 |  125.0000 |     - |   34483.66 KB |
-    |         VecLinqSolution |           5000 |              100 |    30,273.9 us |    424.98 us |    376.73 us |    30,214.4 us |  1.12 |    0.02 |    281.2500 |         - |     - |       1875 KB |
-    | ParallelVecLinqSolution |           5000 |              100 |     4,012.8 us |     64.80 us |     60.61 us |     3,986.4 us |  0.15 |    0.00 |    304.6875 |         - |     - |    1879.04 KB |
-    |                         |                |                  |                |              |              |                |       |         |             |           |       |               |
-    |            LinqSolution |           5000 |            10000 | 2,731,117.1 us | 52,753.36 us | 51,810.85 us | 2,710,610.5 us |  1.00 |    0.00 | 522000.0000 |         - |     - | 3200436.99 KB |
-    |    ParallelLinqSolution |           5000 |            10000 |   626,047.4 us |  8,770.81 us |  7,775.10 us |   624,161.2 us |  0.23 |    0.01 | 522000.0000 | 7000.0000 |     - | 3200443.24 KB |
-    |         VecLinqSolution |           5000 |            10000 | 2,968,166.5 us | 18,816.72 us | 16,680.53 us | 2,968,306.2 us |  1.08 |    0.02 |           - |         - |     - |       1875 KB |
-    | ParallelVecLinqSolution |           5000 |            10000 |   317,296.8 us |  4,565.56 us |  4,483.99 us |   315,231.3 us |  0.12 |    0.00 |           - |         - |     - |     1879.3 KB |
-    */
+
+     */
 
     [SimpleJob(RuntimeMoniker.NetCoreApp50), MemoryDiagnoser, DisassemblyDiagnoser(maxDepth: 2)]
     public class ElonAbernathy_Project
@@ -44,8 +24,8 @@ namespace VectorizedAlgorithms
         public int NumberOfPoints;
         [Params(100, 1000)]
         public int NumberOfSegments;
-        private Point[] points;
-        private LineSegment[] segments;
+        public Point[] points;
+        public LineSegment[] segments;
         private VecPoint[] vecPoints;
         private VecSegment[] vecSegments;
 
@@ -97,17 +77,17 @@ namespace VectorizedAlgorithms
         public Point[] GetPoints()
         {
             Point[] points = new Point[NumberOfPoints];
-            
+
             vecPoints = new VecPoint[NumberOfPoints];
 
             PointData = new VectorizedCalculationContext(NumberOfPoints);
-            
+
             Random random = new Random(seed);
-            
+
             for (int i = 0; i < NumberOfPoints; i++)
             {
                 Point point = GetRandomPoint(random);
-                
+
                 points[i] = point;
 
                 vecPoints[i] = new Vector3(point.X, point.Y, point.Z);
@@ -145,7 +125,7 @@ namespace VectorizedAlgorithms
         {
             float[] result = new float[this.NumberOfPoints];
 
-            for(int i = 0; i < NumberOfPoints; ++i)
+            for (int i = 0; i < NumberOfPoints; ++i)
             {
                 Point point = points[i];
 
@@ -202,7 +182,9 @@ namespace VectorizedAlgorithms
         public unsafe ReadOnlySpan<float> Sse41_Solution()
         {
             if (!Sse41.IsSupported)
+            {
                 throw new PlatformNotSupportedException();
+            }
 
             float[] results = new float[PointData.Vector128Count * Vector128<float>.Count];
 
@@ -387,7 +369,9 @@ namespace VectorizedAlgorithms
         public unsafe ReadOnlySpan<float> Avx2_Solution()
         {
             if (!Avx.IsSupported)
+            {
                 throw new PlatformNotSupportedException();
+            }
 
             float[] results = new float[PointData.Vector256Count * Vector256<float>.Count];
 
