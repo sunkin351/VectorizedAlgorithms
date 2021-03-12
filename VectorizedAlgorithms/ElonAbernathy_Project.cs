@@ -184,16 +184,15 @@ namespace VectorizedAlgorithms
 
             float[] results = new float[PointData.Vector128Count * Vector128<float>.Count];
 
-            Vector128<float>* shortest = stackalloc Vector128<float>[4] //Manual Fully controlled stack spill
-            {
-                Vector128<float>.Zero, // X
-                Vector128<float>.Zero, // Y
-                Vector128<float>.Zero, // Z
-                Vector128.Create(float.MaxValue) // distance
-            };
-
+            Vector128<float>* shortest = stackalloc Vector128<float>[4]; //Manual Fully controlled stack spill
+            
             for (int i = 0; i < PointData.Vector128Count; ++i)
             {
+                shortest[0] = default;
+                shortest[1] = default;
+                shortest[2] = default;
+                shortest[3] = Vector128.Create(float.MaxValue);
+
                 // float x = point.X;
                 // float y = point.Y;
                 // float z = point.Z;
@@ -363,16 +362,15 @@ namespace VectorizedAlgorithms
 
             float[] results = new float[PointData.Vector256Count * Vector256<float>.Count];
 
-            Vector256<float>* shortest = stackalloc Vector256<float>[4] //Manual Fully controlled stack spill
-            {
-                Vector256<float>.Zero, // X
-                Vector256<float>.Zero, // Y
-                Vector256<float>.Zero, // Z
-                Vector256.Create(float.MaxValue) // distance
-            };
+            Vector256<float>* shortest = stackalloc Vector256<float>[4]; //Manual Fully controlled stack spill
 
             for (int i = 0; i < PointData.Vector256Count; ++i)
             {
+                shortest[0] = default;
+                shortest[1] = default;
+                shortest[2] = default;
+                shortest[3] = Vector256.Create(float.MaxValue);
+
                 // float x = point.X;
                 // float y = point.Y;
                 // float z = point.Z;
