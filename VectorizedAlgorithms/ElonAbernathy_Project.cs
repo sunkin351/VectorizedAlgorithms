@@ -24,8 +24,8 @@ namespace VectorizedAlgorithms
         public int NumberOfPoints;
         [Params(100, 1000)]
         public int NumberOfSegments;
-        public Point[] points;
-        public LineSegment[] segments;
+        private Point[] points;
+        private LineSegment[] segments;
         private VecPoint[] vecPoints;
         private VecSegment[] vecSegments;
 
