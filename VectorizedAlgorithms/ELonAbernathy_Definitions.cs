@@ -117,12 +117,18 @@ namespace VectorizedAlgorithms
             
             float vt = Vector3.Dot(vl, vfirst) / lineSegment.DirectionDot;
 
-            Vector3 intersection = vl * vt + vlo;
+            Vector3 intersectionPoint = vl * vt + vlo;
 
-            bool isInsideLineSegment = Math.Max(Vector3.Distance(vlo, intersection), Vector3.Distance(intersection, lineSegment.B)) < lineSegment.Length;
-            if (isInsideLineSegment)
+            bool isOnLineSegment = Math.Sqrt(
+                Math.Max(
+                    Vector3.DistanceSquared(lineSegment.A, intersectionPoint),
+                    Vector3.DistanceSquared(intersectionPoint, lineSegment.B)
+                )
+            ) < lineSegment.Length;
+
+            if (isOnLineSegment)
             {
-                return intersection;
+                return intersectionPoint;
             }
             else
             {
@@ -160,7 +166,12 @@ namespace VectorizedAlgorithms
 
             Vector3 intersectionPoint = new(xx, yy, zz);
             
-            bool isOnLineSegment = Math.Max(Vector3.Distance(lineSegment.A, intersectionPoint), Vector3.Distance(intersectionPoint, lineSegment.B)) < lineSegment.Length;
+            bool isOnLineSegment = Math.Sqrt(
+                Math.Max(
+                    Vector3.DistanceSquared(lineSegment.A, intersectionPoint),
+                    Vector3.DistanceSquared(intersectionPoint, lineSegment.B)
+                )
+            ) < lineSegment.Length;
             
             if (isOnLineSegment)
             {
@@ -168,7 +179,7 @@ namespace VectorizedAlgorithms
             }
             else
             {
-                if (Vector3.Distance(point, lineSegment.A) < Vector3.Distance(point, lineSegment.B))
+                if (Vector3.DistanceSquared(point, lineSegment.A) < Vector3.DistanceSquared(point, lineSegment.B))
                 {
                     return lineSegment.A;
                 }

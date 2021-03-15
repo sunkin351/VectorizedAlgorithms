@@ -10,16 +10,17 @@ using System.Diagnostics;
 
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
+using Microsoft.Toolkit.HighPerformance.Helpers;
 
 namespace VectorizedAlgorithms
 {
-    [SimpleJob(RuntimeMoniker.NetCoreApp50), MemoryDiagnoser, DisassemblyDiagnoser(maxDepth: 2)]
+    [SimpleJob(RuntimeMoniker.NetCoreApp50), DisassemblyDiagnoser(maxDepth: 4)]
     public class ElonAbernathy_Project
     {
         readonly int seed = 1;
-        [Params(200, 500)]
+        [Params(500, 1000)]
         public int NumberOfPoints;
-        [Params(100, 1000)]
+        [Params(100, 500)]
         public int NumberOfSegments;
         public Point[] Points { get; private set; }
         public LineSegment[] Segments { get; private set; }
@@ -28,7 +29,7 @@ namespace VectorizedAlgorithms
 
         private VectorizedCalculationContext PointData;
 
-        private ParallelOptions _options = new ParallelOptions()
+        private readonly ParallelOptions _options = new ParallelOptions()
         {
             MaxDegreeOfParallelism = 12
         };
@@ -118,16 +119,17 @@ namespace VectorizedAlgorithms
         }
 
         [Benchmark(Baseline = true)]
-        public float[] Solution()
+        public (int[] indices, float[] distances) Solution()
         {
-            float[] result = new float[this.NumberOfPoints];
+            int[] indices = new int[NumberOfPoints];
+            float[] distances = new float[NumberOfPoints];
 
             for (int i = 0; i < NumberOfPoints; ++i)
             {
                 Vector3 point = Points[i];
 
-                Vector3 shortest = default;
                 float distanceSq = float.MaxValue;
+                int closestSegment = 0;
 
                 for (int j = 0; j < Segments.Length; ++j)
                 {
@@ -137,28 +139,30 @@ namespace VectorizedAlgorithms
 
                     if (distanceSq > tdist)
                     {
-                        shortest = tmp;
+                        closestSegment = j;
                         distanceSq = tdist;
                     }
                 }
 
-                result[i] = Vector3.Distance(point, shortest);
+                indices[i] = closestSegment;
+                distances[i] = MathF.Sqrt(distanceSq);
             }
 
-            return result;
+            return (indices, distances);
         }
 
         [Benchmark]
-        public float[] VecSolution()
+        public (int[] indices, float[] distances) VecSolution()
         {
-            float[] result = new float[this.NumberOfPoints];
+            int[] indices = new int[NumberOfPoints];
+            float[] distances = new float[NumberOfPoints];
 
             for (int i = 0; i < NumberOfPoints; ++i)
             {
                 Vector3 point = Points[i];
 
-                Vector3 shortest = default;
                 float distanceSq = float.MaxValue;
+                int closestSegment = 0;
 
                 for (int j = 0; j < Segments.Length; ++j)
                 {
@@ -168,51 +172,56 @@ namespace VectorizedAlgorithms
 
                     if (distanceSq > tdist)
                     {
-                        shortest = tmp;
                         distanceSq = tdist;
+                        closestSegment = j;
                     }
                 }
 
-                result[i] = Vector3.Distance(point, shortest);
+                indices[i] = closestSegment;
+                distances[i] = MathF.Sqrt(distanceSq);
             }
 
-            return result;
+            return (indices, distances);
         }
 
         [Benchmark]
-        public unsafe ReadOnlySpan<float> Sse41_Solution()
+        public (int[] indices, float[] distances) IntrinsicSolution()
         {
-            if (!Sse41.IsSupported)
-            {
-                throw new PlatformNotSupportedException();
-            }
-
-            float[] results = new float[PointData.Vector128Count * Vector128<float>.Count];
-
-            for (int i = 0; i < PointData.Vector128Count; ++i)
-            {
-                Solution_Sse41_Impl(ref PointData, i, this.Segments, out Unsafe.As<float, Vector128<float>>(ref results[i * Vector128<float>.Count]));
-            }
-
-            return results.AsSpan(0, NumberOfPoints);
+            return PointData.SegmentsClosestToPoints(Segments);
         }
 
-        [Benchmark]
-        public unsafe ReadOnlySpan<float> Avx2_Solution()
+        struct ParallelAction_Sse41 : IAction
         {
-            if (!Avx.IsSupported)
+            public VectorizedCalculationContext PointData;
+            public LineSegment[] Segments;
+            public float[] ResultArray;
+
+            public ParallelAction_Sse41(VectorizedCalculationContext pointData, LineSegment[] segments,  float[] resultArray)
             {
-                throw new PlatformNotSupportedException();
+                (PointData, Segments, ResultArray) = (pointData, segments, resultArray);
             }
 
-            float[] results = new float[PointData.Vector256Count * Vector256<float>.Count];
-
-            for (int i = 0; i < PointData.Vector256Count; ++i)
+            public void Invoke(int index)
             {
-                Solution_Avx_Impl(ref PointData, i, Segments, out Unsafe.As<float, Vector256<float>>(ref results[i * Vector256<float>.Count]));
+                Solution_Sse41_Impl(PointData, index, Segments, out Unsafe.As<float, Vector128<float>>(ref ResultArray[index * Vector128<float>.Count]));
+            }
+        }
+
+        struct ParallelAction_Avx : IAction
+        {
+            public VectorizedCalculationContext PointData;
+            public LineSegment[] Segments;
+            public float[] ResultArray;
+
+            public ParallelAction_Avx(VectorizedCalculationContext pointData, LineSegment[] segments, float[] resultArray)
+            {
+                (PointData, Segments, ResultArray) = (pointData, segments, resultArray);
             }
 
-            return results.AsSpan(0, NumberOfPoints);
+            public void Invoke(int index)
+            {
+                Solution_Avx_Impl(PointData, index, Segments, out Unsafe.As<float, Vector256<float>>(ref ResultArray[index * Vector256<float>.Count]));
+            }
         }
 
         [Benchmark]
@@ -227,8 +236,25 @@ namespace VectorizedAlgorithms
 
             Parallel.For(0, PointData.Vector128Count, _options, index =>
             {
-                Solution_Sse41_Impl(ref PointData, index, Segments, out Unsafe.As<float, Vector128<float>>(ref results[index * Vector128<float>.Count]));
+                Solution_Sse41_Impl(PointData, index, Segments, out Unsafe.As<float, Vector128<float>>(ref results[index * Vector128<float>.Count]));
             });
+
+            return results.AsSpan(0, NumberOfPoints);
+        }
+
+        [Benchmark]
+        public ReadOnlySpan<float> Sse41_ParallelHelper_Solution()
+        {
+            if (!Sse41.IsSupported)
+            {
+                throw new PlatformNotSupportedException();
+            }
+
+            float[] results = new float[PointData.Vector128Count * Vector128<float>.Count];
+
+            ParallelAction_Sse41 action = new(PointData, Segments, results);
+
+            ParallelHelper.For(0, PointData.Vector128Count, in action, 4);
 
             return results.AsSpan(0, NumberOfPoints);
         }
@@ -245,13 +271,30 @@ namespace VectorizedAlgorithms
 
             Parallel.For(0, PointData.Vector256Count, _options, index =>
             {
-                Solution_Avx_Impl(ref PointData, index, Segments, out Unsafe.As<float, Vector256<float>>(ref results[index * Vector256<float>.Count]));
+                Solution_Avx_Impl(PointData, index, Segments, out Unsafe.As<float, Vector256<float>>(ref results[index * Vector256<float>.Count]));
             });
 
             return results.AsSpan(0, NumberOfPoints);
         }
 
-        private static unsafe void Solution_Sse41_Impl(ref VectorizedCalculationContext context, int i, LineSegment[] segments, out Vector128<float> result)
+        [Benchmark]
+        public ReadOnlySpan<float> Avx_ParallelHelper_Solution()
+        {
+            if (!Avx.IsSupported)
+            {
+                throw new PlatformNotSupportedException();
+            }
+
+            float[] results = new float[PointData.Vector256Count * Vector256<float>.Count];
+
+            ParallelAction_Avx action = new(PointData, Segments, results);
+
+            ParallelHelper.For(0, PointData.Vector256Count, in action, 2);
+
+            return results.AsSpan(0, NumberOfPoints);
+        }
+
+        private static unsafe void Solution_Sse41_Impl(VectorizedCalculationContext context, int i, LineSegment[] segments, out Vector128<float> result)
         {
             Debug.Assert(i < context.Vector128Count);
 
@@ -417,7 +460,7 @@ namespace VectorizedAlgorithms
             result = Sse.Sqrt(shortest[3]);
         }
 
-        private static unsafe void Solution_Avx_Impl(ref VectorizedCalculationContext context, int i, LineSegment[] segments, out Vector256<float> result)
+        private static unsafe void Solution_Avx_Impl(VectorizedCalculationContext context, int i, LineSegment[] segments, out Vector256<float> result)
         {
             Debug.Assert(i < context.Vector256Count);
 
