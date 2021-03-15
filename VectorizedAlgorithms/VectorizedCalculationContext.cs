@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
+using Microsoft.Toolkit.HighPerformance.Helpers;
 
 namespace VectorizedAlgorithms
 {
@@ -245,7 +246,7 @@ namespace VectorizedAlgorithms
                 v1 = Helper_MultiplyAdd(v2, v2, v1);
 
                 //Max of distances
-                v0 = Sse.Max(v0, v1);
+                v0 = Sse.Max(v1, v0);
                 v0 = Sse.Sqrt(v0);
 
                 //Compare max distances to segment length
@@ -497,6 +498,42 @@ namespace VectorizedAlgorithms
             else
             {
                 return Avx.Add(Avx.Multiply(a, b), c);
+            }
+        }
+
+        public struct ParallelAction_Sse41 : IAction
+        {
+            public VectorizedCalculationContext PointData;
+            public LineSegment[] Segments;
+            public float[] Distances;
+            public int[] Indices;
+
+            public ParallelAction_Sse41(VectorizedCalculationContext pointData, LineSegment[] segments, int[] indices, float[] distances)
+            {
+                (PointData, Segments, Distances, Indices) = (pointData, segments, distances, indices);
+            }
+
+            public readonly void Invoke(int index)
+            {
+                PointData.SegmentsClosestToPoints_Sse41_Impl(index, Segments, out GetVector128(Indices, index), out GetVector128(Distances, index));
+            }
+        }
+
+        public struct ParallelAction_Avx : IAction
+        {
+            public VectorizedCalculationContext PointData;
+            public LineSegment[] Segments;
+            public float[] Distances;
+            public int[] Indices;
+
+            public ParallelAction_Avx(VectorizedCalculationContext pointData, LineSegment[] segments, int[] indices, float[] distances)
+            {
+                (PointData, Segments, Distances, Indices) = (pointData, segments, distances, indices);
+            }
+
+            public readonly void Invoke(int index)
+            {
+                PointData.SegmentsClosestToPoints_Avx2_Impl(index, Segments, out GetVector256(Indices, index), out GetVector256(Distances, index));
             }
         }
     }

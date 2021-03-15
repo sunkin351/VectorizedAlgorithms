@@ -1,10 +1,7 @@
 {
   "profiles": {
     "VectorizedAlgorithms": {
-      "commandName": "Project",
-      "environmentVariables": {
-        "COMPlus_EnableFMA": "0"
-      }
+      "commandName": "Project"
     }
   }
 }
