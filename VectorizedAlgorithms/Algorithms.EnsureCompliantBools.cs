@@ -7,12 +7,12 @@ namespace VectorizedAlgorithms
 {
     public static unsafe partial class Algorithms
     {
-        public static unsafe void EnsureCompliantBools(Span<bool> input, Span<bool> output)
+        public static unsafe void EnsureCompliantBools(ReadOnlySpan<bool> input, Span<bool> output)
         {
             EnsureCompliantBools(MemoryMarshal.Cast<bool, byte>(input), MemoryMarshal.Cast<bool, byte>(output));
         }
 
-        public static unsafe void EnsureCompliantBools(Span<byte> input, Span<byte> output)
+        public static unsafe void EnsureCompliantBools(ReadOnlySpan<byte> input, Span<byte> output)
         {
             if (input.IsEmpty)
                 return;
