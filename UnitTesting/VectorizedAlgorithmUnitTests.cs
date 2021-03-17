@@ -63,5 +63,70 @@ namespace UnitTesting
                 };
             }
         }
+
+        [Theory]
+        [MemberData(nameof(IndexOfArraySizes))]
+        public void IndexOf_Byte(int size)
+        {
+            var arr = PrepareIndexOfTestData(size, n => (byte)n);
+
+            for (int i = 0; i < arr.Length; ++i)
+            {
+                int idx = Algorithms.IndexOf(arr, (byte)i);
+
+                Assert.Equal(i, idx);
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(IndexOfArraySizes))]
+        public void IndexOf_UInt16(int size)
+        {
+            var arr = PrepareIndexOfTestData(size, n => (ushort)n);
+
+            for (int i = 0; i < arr.Length; ++i)
+            {
+                int idx = Algorithms.IndexOf(arr, (ushort)i);
+
+                Assert.Equal(i, idx);
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(IndexOfArraySizes))]
+        public void IndexOf_UInt32(int size)
+        {
+            var arr = PrepareIndexOfTestData(size, n => (uint)n);
+
+            for (int i = 0; i < arr.Length; ++i)
+            {
+                int idx = Algorithms.IndexOf(arr, (uint)i);
+
+                Assert.Equal(i, idx);
+            }
+        }
+
+        private static T[] PrepareIndexOfTestData<T>(int size, Func<int, T> convert)
+        {
+            var arr = new T[size];
+
+            for (int i = 0; i < arr.Length; ++i)
+            {
+                arr[i] = convert(i);
+            }
+
+            return arr;
+        }
+
+        public static IEnumerable<object[]> IndexOfArraySizes
+        {
+            get
+            {
+                yield return new object[] { 8   };
+                yield return new object[] { 16  };
+                yield return new object[] { 64  };
+                yield return new object[] { 255 };
+            }
+        }
     }
 }
