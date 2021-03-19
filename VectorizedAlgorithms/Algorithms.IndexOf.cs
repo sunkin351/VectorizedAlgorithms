@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 
@@ -435,6 +436,11 @@ namespace VectorizedAlgorithms
             {
                 return idx + (BitOperations.TrailingZeroCount(mask) / sizeof(byte));
             }
+        }
+
+        public static int IndexOf(ReadOnlySpan<char> span, char value)
+        {
+            return IndexOf(MemoryMarshal.Cast<char, ushort>(span), (ushort)value);
         }
     }
 }
